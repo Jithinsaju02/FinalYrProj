@@ -7,11 +7,34 @@
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
-    <header class="header">Flask App - Page 1 - Header</header>
+    <header class="header">Sentry Scout</header>
     <main class="main">
-        <div class="dropdown">Dropdown: Select Destination</div>
-        <button class="navigate-btn">Navigate</button>
+        <div>
+            <h2>Current Goal:</h2>
+            <p id="goal-coordinates">No goal set</p>
+        </div>
+        <button id="speak-btn" class="speak-btn">Click to Speak</button>
     </main>
     <footer class="footer">Status: Updates Here</footer>
+
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script>
+        const socket = io.connect('http://localhost:5000');
+
+        // Listen for goal updates from Flask
+        socket.on('goal_update', (data) => {
+            const goalDiv = document.getElementById('goal-coordinates');
+            if (data.error) {
+                goalDiv.textContent = data.error;
+            } else {
+                console.log(`Goal Received: x=${data.x}, y=${data.y}, z=${data.z}`);
+                goalDiv.textContent = `X: ${data.x}, Y: ${data.y}, Z: ${data.z}`;
+                alert(`New Goal: (${data.x}, ${data.y}, ${data.z})`);
+            }
+        });
+
+        // Request the current goal when the page loads
+        socket.emit('get_current_goal');
+    </script>
 </body>
 </html>
