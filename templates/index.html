@@ -10,31 +10,46 @@
     <header class="header">Sentry Scout</header>
     <main class="main">
         <div>
-            <h2>Current Goal:</h2>
-            <p id="goal-coordinates">No goal set</p>
+            <h2>Select Destination:</h2>
+            <div id="goalpost" style="width: 500px; height: 500px; background-color: #eee; position: relative;">
+                <img src="/static/images/goalpost.png" alt="Goalpost" style="width: 100%; height: 100%;"/>
+                <div id="destination-indicator" style="position: absolute; background-color: red; width: 10px; height: 10px; border-radius: 50%; display: none;"></div>
+            </div>
+            <p id="coordinates-display">No destination selected</p>
         </div>
-        <button id="speak-btn" class="speak-btn">Click to Speak</button>
+        <button id="send-destination-btn" class="speak-btn">Send Destination</button>
     </main>
     <footer class="footer">Status: Updates Here</footer>
 
     <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
     <script>
         const socket = io.connect('http://localhost:5000');
+        const destinationIndicator = document.getElementById("destination-indicator");
+        const coordinatesDisplay = document.getElementById("coordinates-display");
 
-        // Listen for goal updates from Flask
-        socket.on('goal_update', (data) => {
-            const goalDiv = document.getElementById('goal-coordinates');
-            if (data.error) {
-                goalDiv.textContent = data.error;
-            } else {
-                console.log(`Goal Received: x=${data.x}, y=${data.y}, z=${data.z}`);
-                goalDiv.textContent = `X: ${data.x}, Y: ${data.y}, Z: ${data.z}`;
-                alert(`New Goal: (${data.x}, ${data.y}, ${data.z})`);
-            }
+        // Function to handle map clicks and fetch coordinates
+        document.getElementById('goalpost').addEventListener('click', function(event) {
+            const goalpostRect = event.target.getBoundingClientRect();
+            const clickX = event.clientX - goalpostRect.left; // Relative X
+            const clickY = event.clientY - goalpostRect.top;  // Relative Y
+
+            // Show the destination indicator on the map
+            destinationIndicator.style.left = `${clickX - 5}px`;  // Adjust to center the dot
+            destinationIndicator.style.top = `${clickY - 5}px`;   // Adjust to center the dot
+            destinationIndicator.style.display = "block";
+
+            // Display the coordinates on the page
+            coordinatesDisplay.textContent = `Destination: X=${clickX}, Y=${clickY}`;
+
+            // Send the coordinates to the backend via WebSocket
+            socket.emit('send_destination', { x: clickX, y: clickY });
         });
 
-        // Request the current goal when the page loads
-        socket.emit('get_current_goal');
+    // Listen for the backend acknowledgment
+    socket.on('destination_received', (data) => {
+        console.log(data.message);  // Logs the confirmation message
+        alert(data.message);        // Shows an alert with the confirmation message
+    });
     </script>
 </body>
 </html>
