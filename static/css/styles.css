@@ -36,3 +36,29 @@ body {
     height: 30px;
     transition: transform 0.5s ease-in-out;
 }
+
+#mic-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    font-size: 14px;
+    font-weight: bold;
+    color: #333;
+}
+
+#mic-btn img {
+    width: 50px;  /* Adjust size as needed */
+    height: 50px;
+    transition: transform 0.2s ease-in-out;
+}
+
+#mic-btn:hover img {
+    transform: scale(1.1);
+}

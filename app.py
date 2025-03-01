@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
+from utils.speechtotext import socketio,record_and_transcribe
 from flask import Flask, render_template, jsonify
 from flask_socketio import SocketIO, emit
 import threading
@@ -116,6 +117,15 @@ def ros_thread():
     rclpy.spin(node)  # Keep spinning to listen to topics
     node.destroy_node()  # Cleanup ROS node after it stops
     rclpy.shutdown()  # Shut down the ROS client
+
+
+@socketio.on('start_recording')
+def start_recording():
+    print("Recording started...")
+    # Call speech recognition function here and send result
+    # Start recording in a separate thread (calls the function from speechtotext.py)
+    threading.Thread(target=record_and_transcribe).start()
+    socketio.emit("transcription_result", {"transcription": transcription})
 
 
 # Start the application

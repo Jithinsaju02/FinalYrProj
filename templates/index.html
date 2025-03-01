@@ -18,6 +18,12 @@
             <p id="coordinates-display">No destination selected</p>
         </div>
         <button id="send-destination-btn" class="speak-btn">Send Destination</button>
+        <button id="mic-btn">
+            <img src="/static/images/mic.png" alt="Mic Icon">
+            <span>Touch to Speak</span>
+        </button>
+        
+        
     </main>
     <footer class="footer">Status: Updates Here</footer>
 
@@ -50,6 +56,36 @@
         console.log(data.message);  // Logs the confirmation message
         alert(data.message);        // Shows an alert with the confirmation message
     });
+
+
+        // Create a display area for transcription
+    const transcriptionDisplay = document.createElement("p");
+    transcriptionDisplay.id = "transcription-display";
+    transcriptionDisplay.style.position = "fixed";
+    transcriptionDisplay.style.bottom = "80px";
+    transcriptionDisplay.style.right = "20px";
+    transcriptionDisplay.style.background = "rgba(0,0,0,0.7)";
+    transcriptionDisplay.style.color = "white";
+    transcriptionDisplay.style.padding = "10px";
+    transcriptionDisplay.style.borderRadius = "5px";
+    transcriptionDisplay.style.display = "none";  // Initially hidden
+    document.body.appendChild(transcriptionDisplay);
+
+    document.getElementById("mic-btn").addEventListener("click", function() {
+    console.log("Voice button clicked, starting recording...");
+    transcriptionDisplay.innerText = "Listening... 🎤"; // Show listening status
+    transcriptionDisplay.style.display = "block";  // Make it visible
+    socket.emit("start_recording"); // Send event to start speech recognition
+});
+
+    socket.on("transcription_result", function(data) {
+        console.log("Received transcription:", data); // Debugging
+    if (data.transcription && data.transcription.trim() !== "") {
+        transcriptionDisplay.innerText = "You said: " + data.transcription;
+    } else {
+        transcriptionDisplay.innerText = "No speech detected ❌";
+    }
+});
     </script>
 </body>
 </html>
