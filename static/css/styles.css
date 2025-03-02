@@ -37,28 +37,56 @@ body {
     transition: transform 0.5s ease-in-out;
 }
 
-#mic-btn {
+ /* Floating, Bouncing Hollow Circular Button */
+ #mic-btn {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    background: none;
-    border: none;
-    cursor: pointer;
+    width: 90px;
+    height: 90px;
+    background-color: transparent; /* Hollow */
+    border: 3px solid black; /* Black Border */
+    color: black;
+    border-radius: 50%;
     display: flex;
     flex-direction: column;
+    justify-content: center;
     align-items: center;
-    text-align: center;
-    font-size: 14px;
-    font-weight: bold;
-    color: #333;
+    cursor: pointer;
+    animation: bounce 2s infinite ease-in-out; /* Continuous bounce */
 }
 
+/* Mic Icon */
 #mic-btn img {
-    width: 50px;  /* Adjust size as needed */
-    height: 50px;
-    transition: transform 0.2s ease-in-out;
+    width: 30px;
+    height: 30px;
 }
 
-#mic-btn:hover img {
+/* Touch to Speak Text */
+#mic-btn span {
+    font-size: 12px;
+    font-weight: bold;
+    margin-top: 5px;
+}
+
+/* Hover Effect */
+#mic-btn:hover {
     transform: scale(1.1);
+    box-shadow: 0px 6px 14px rgba(0, 0, 0, 0.3);
+}
+
+/* Bouncing Animation */
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }   /* Start and end position */
+    50% { transform: translateY(-15px); }    /* Move up */
+}
+
+#destination-indicator {
+    position: absolute;
+    background-color: red;
+    width: 12px;  
+    height: 12px;
+    border-radius: 50%;
+    display: none; /* Ensure it only shows when needed */
+    z-index: 10;  /* Make sure it's on top */
 }

@@ -17,13 +17,10 @@
             </div>
             <p id="coordinates-display">No destination selected</p>
         </div>
-        <button id="send-destination-btn" class="speak-btn">Send Destination</button>
         <button id="mic-btn">
             <img src="/static/images/mic.png" alt="Mic Icon">
             <span>Touch to Speak</span>
         </button>
-        
-        
     </main>
     <footer class="footer">Status: Updates Here</footer>
 
@@ -32,60 +29,110 @@
         const socket = io.connect('http://localhost:5000');
         const destinationIndicator = document.getElementById("destination-indicator");
         const coordinatesDisplay = document.getElementById("coordinates-display");
+        const micBtn = document.getElementById("mic-btn");
+        const micIcon = micBtn.querySelector("img");  
+        const micText = micBtn.querySelector("span"); 
 
-        // Function to handle map clicks and fetch coordinates
+        const locations = {
+            "office": { x: 100, y: 100 },
+            "foss lab": { x: 100, y: 150 },
+            "turing lab": { x: 200, y: 300 },
+            "conference room": { x: 350, y: 250 },
+            "exit": { x: 450, y: 50 }
+        };
+
+        // ✅ Click to select a location manually
         document.getElementById('goalpost').addEventListener('click', function(event) {
-            const goalpostRect = event.target.getBoundingClientRect();
-            const clickX = event.clientX - goalpostRect.left; // Relative X
-            const clickY = event.clientY - goalpostRect.top;  // Relative Y
+            const goalpostRect = this.getBoundingClientRect();
+            const clickX = event.clientX - goalpostRect.left;
+            const clickY = event.clientY - goalpostRect.top;
 
-            // Show the destination indicator on the map
-            destinationIndicator.style.left = `${clickX - 5}px`;  // Adjust to center the dot
-            destinationIndicator.style.top = `${clickY - 5}px`;   // Adjust to center the dot
+            destinationIndicator.style.left = `${clickX - 5}px`;
+            destinationIndicator.style.top = `${clickY - 5}px`;
             destinationIndicator.style.display = "block";
 
-            // Display the coordinates on the page
             coordinatesDisplay.textContent = `Destination: X=${clickX}, Y=${clickY}`;
-
-            // Send the coordinates to the backend via WebSocket
             socket.emit('send_destination', { x: clickX, y: clickY });
         });
 
-    // Listen for the backend acknowledgment
-    socket.on('destination_received', (data) => {
-        console.log(data.message);  // Logs the confirmation message
-        alert(data.message);        // Shows an alert with the confirmation message
-    });
+        socket.on('destination_received', (data) => {
+            setTimeout(() => alert(data.message), 100);
+        });
 
+        // ✅ Transcription UI
+        const transcriptionDisplay = document.createElement("p");
+        transcriptionDisplay.id = "transcription-display";
+        transcriptionDisplay.style.position = "fixed";
+        transcriptionDisplay.style.bottom = "80px";
+        transcriptionDisplay.style.right = "20px";
+        transcriptionDisplay.style.background = "rgba(0,0,0,0.7)";
+        transcriptionDisplay.style.color = "white";
+        transcriptionDisplay.style.padding = "10px";
+        transcriptionDisplay.style.borderRadius = "5px";
+        transcriptionDisplay.style.display = "none";
+        document.body.appendChild(transcriptionDisplay);
 
-        // Create a display area for transcription
-    const transcriptionDisplay = document.createElement("p");
-    transcriptionDisplay.id = "transcription-display";
-    transcriptionDisplay.style.position = "fixed";
-    transcriptionDisplay.style.bottom = "80px";
-    transcriptionDisplay.style.right = "20px";
-    transcriptionDisplay.style.background = "rgba(0,0,0,0.7)";
-    transcriptionDisplay.style.color = "white";
-    transcriptionDisplay.style.padding = "10px";
-    transcriptionDisplay.style.borderRadius = "5px";
-    transcriptionDisplay.style.display = "none";  // Initially hidden
-    document.body.appendChild(transcriptionDisplay);
+        micBtn.addEventListener("click", function() {
+            console.log("🎤 Mic button clicked!");
 
-    document.getElementById("mic-btn").addEventListener("click", function() {
-    console.log("Voice button clicked, starting recording...");
-    transcriptionDisplay.innerText = "Listening... 🎤"; // Show listening status
-    transcriptionDisplay.style.display = "block";  // Make it visible
-    socket.emit("start_recording"); // Send event to start speech recognition
-});
+            // ✅ Update UI Immediately
+            micIcon.src = "/static/images/red-mic.png";  
+            micText.innerText = "Recording...";
+            micText.style.color = "red";
 
-    socket.on("transcription_result", function(data) {
-        console.log("Received transcription:", data); // Debugging
-    if (data.transcription && data.transcription.trim() !== "") {
-        transcriptionDisplay.innerText = "You said: " + data.transcription;
-    } else {
-        transcriptionDisplay.innerText = "No speech detected ❌";
-    }
-});
+            transcriptionDisplay.innerText = "Listening... 🎤";
+            transcriptionDisplay.style.display = "block";
+
+            socket.emit("start_recording");  
+
+            // ✅ Fallback to Reset Mic UI after 5 seconds if no response
+            setTimeout(() => resetMicButton(), 5000);
+        });
+
+        function resetMicButton() {
+            micIcon.src = "/static/images/mic.png";  
+            micText.innerText = "Touch to Speak";
+            micText.style.color = "black";
+        }
+
+        // ✅ Handle transcription result
+        socket.on("transcription_result", function(data) {
+            console.log("Received transcription:", data.transcription);
+
+            resetMicButton(); 
+
+            if (data.transcription && data.transcription.trim() !== "") {
+                transcriptionDisplay.innerText = "You said: " + data.transcription;
+            } else {
+                transcriptionDisplay.innerText = "No speech detected ❌";
+            }
+
+            // ✅ Check for closest match
+            const userSpeech = data.transcription.toLowerCase();
+            let found = false;
+
+            for (const place in locations) {
+                if (userSpeech.includes(place.toLowerCase())) {
+                    found = true;
+                    const coordinates = locations[place];
+
+                    destinationIndicator.style.left = `${coordinates.x - 5}px`;
+                    destinationIndicator.style.top = `${coordinates.y - 5}px`;
+                    destinationIndicator.style.display = "block";
+                    coordinatesDisplay.textContent = `Destination: ${place} (X=${coordinates.x}, Y=${coordinates.y})`;
+
+                    socket.emit('send_destination', coordinates);
+                    break;
+                }
+            }
+
+            if (!found) {
+                transcriptionDisplay.innerText += "\n⚠️ Unknown location!";
+            }
+
+            setTimeout(() => transcriptionDisplay.style.display = "none", 5000);
+        });
+
     </script>
 </body>
 </html>

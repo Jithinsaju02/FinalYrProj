@@ -1,14 +1,84 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
-from utils.speechtotext import socketio,record_and_transcribe
+from utils.speechtotext import record_and_transcribe
 from flask import Flask, render_template, jsonify
 from flask_socketio import SocketIO, emit
 import threading
 import time
+import re
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="http://127.0.0.1:5000")
+
+from rapidfuzz import process
+
+locations = {
+    "office": {"x": 100, "y": 100},
+    "foss lab": {"x": 100, "y": 150},
+    "turing lab": {"x": 200, "y": 300},
+    "conference room": {"x": 350, "y": 250},
+    "exit": {"x": 450, "y": 50}
+}
+
+
+# ✅ Expand Common Mistakes List
+common_mistakes = {
+    "touring lab": "turing lab",
+    "force lab": "foss lab",   # Handling "force lab" misinterpretation
+    "4th lab": "foss lab",
+    "fourth lab": "foss lab",
+    "false lab": "foss lab",
+    "confess room": "conference room"
+}
+
+
+
+
+
+# ✅ Remove Extra Words (Common Commands in Speech)
+COMMAND_WORDS = ["take me to", "go to", "navigate to", "move to", "i want to go to"]
+
+def clean_input(text):
+    """Remove common command words and extra spaces"""
+    text = text.lower().strip()
+
+    # ✅ Remove unnecessary words like "Take me to"
+    for phrase in COMMAND_WORDS:
+        text = re.sub(rf"^{phrase}\s*", "", text)  # Remove only if at start
+
+    # ✅ Apply direct correction first
+    if text in common_mistakes:
+        corrected = common_mistakes[text]
+        print(f"🔄 Auto-corrected '{text}' → '{corrected}'")
+        return corrected
+
+    # ✅ Handle number-based errors
+    text = re.sub(r"\b4th\b|\bfourth\b", "foss", text)
+
+    return text.strip()
+
+def find_best_match(user_input):
+    """Finds the best-matching location for the user's speech input."""
+    user_input = clean_input(user_input)  # ✅ Normalize Input
+
+    # ✅ Ensure case-insensitive matching
+    user_input = user_input.lower().strip()
+
+    # ✅ Step 1: Direct Match in Common Mistakes (Optional - But Already Fixed in speechtotext.py)
+    if user_input in common_mistakes:
+        corrected = common_mistakes[user_input]
+        print(f"🔄 Auto-corrected '{user_input}' → '{corrected}'")
+        return corrected
+
+    # ✅ Step 2: Fuzzy Match using RapidFuzz
+    best_match, score = process.extractOne(user_input, locations.keys(), score_cutoff=70)
+
+    if best_match:
+        print(f"✅ Matched '{user_input}' → '{best_match}' with {score}% confidence")
+        return best_match
+    
+    return None  # No match found
 
 
 # Global variables
@@ -121,11 +191,12 @@ def ros_thread():
 
 @socketio.on('start_recording')
 def start_recording():
-    print("Recording started...")
-    # Call speech recognition function here and send result
-    # Start recording in a separate thread (calls the function from speechtotext.py)
-    threading.Thread(target=record_and_transcribe).start()
-    socketio.emit("transcription_result", {"transcription": transcription})
+    print("Recording started... (inside start_recording)")
+    threading.Thread(target=record_and_transcribe, args=(socketio,app), daemon=True).start()  # ✅ Pass `app`
+    print("Recording thread started...")
+
+
+
 
 
 # Start the application
@@ -137,4 +208,4 @@ if __name__ == '__main__':
     threading.Thread(target=simulate_robot_updates, daemon=True).start()
     
     # Run Flask with WebSocket support
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
