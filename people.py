@@ -1,109 +1,120 @@
 import cv2
+import os
 import numpy as np
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 import time
-import os
+import threading
 
-# Constants
-COOLDOWN = 60  # Cooldown period in seconds
-last_alert_time = 0
-ALERT_SENT = False  # Flag to track if an alert has been sent during the current detection event
+class PeopleDetector:
+    def __init__(self):
+        # Constants
+        self.COOLDOWN = 60  # seconds
+        self.last_alert_time = 0
+        self.ALERT_SENT = False
 
-# Email configuration (REPLACE WITH YOUR CREDENTIALS)
-SENDER_EMAIL = "scoutsentry390@gmail.com"
-RECEIVER_EMAIL = "labosmits@gmail.com"
-EMAIL_PASSWORD = "msll hnbt byty odgg" # Use an App Password!
+        # Email config
+        self.SENDER_EMAIL = "scoutsentry390@gmail.com"
+        self.RECEIVER_EMAIL = "labosmits@gmail.com"
+        self.EMAIL_PASSWORD = "msll hnbt byty odgg"
 
-# MobileNet SSD model paths
-prototxt = "deploy.prototxt"
-model = "mobilenet_iter_73000.caffemodel"
+        # Use absolute path to Haar Cascade classifier
+        cascade_path = "/usr/local/share/opencv4/haarcascades/haarcascade_fullbody.xml"
+        
+        # Alternative paths to try
+        alternative_paths = [
+            "/usr/share/opencv4/haarcascades/haarcascade_fullbody.xml",
+            "/usr/local/share/OpenCV/haarcascades/haarcascade_fullbody.xml",
+            os.path.join(os.path.dirname(cv2.__file__), "data", "haarcascades", "haarcascade_fullbody.xml")
+        ]
 
-# Load the MobileNet SSD model
-net = cv2.dnn.readNetFromCaffe(prototxt, model)
+        # Find the first existing path
+        for path in [cascade_path] + alternative_paths:
+            if os.path.exists(path):
+                self.cascade_path = path
+                break
+        else:
+            raise FileNotFoundError("Could not find Haar Cascade classifier file")
 
-# Initialize the webcam
-cap = cv2.VideoCapture(0)
+        # Load the classifier
+        self.person_cascade = cv2.CascadeClassifier(self.cascade_path)
 
-# Function to send an email with the detected image
-def send_email(image_path):
-    msg = MIMEMultipart()
-    msg['From'] = SENDER_EMAIL
-    msg['To'] = RECEIVER_EMAIL
-    msg['Subject'] = "Person Detected!"
+        # Webcam init
+        self.cap = cv2.VideoCapture(0)
+        if not self.cap.isOpened():
+            print("[ERROR] Could not open webcam")
 
-    body = "A person has been detected in the frame. See the attached image."
-    msg.attach(MIMEText(body, 'plain'))
+    def send_email(self, image_path):
+        # [Your existing send_email method remains the same]
+        msg = MIMEMultipart()
+        msg['From'] = self.SENDER_EMAIL
+        msg['To'] = self.RECEIVER_EMAIL
+        msg['Subject'] = "Person Detected!"
 
-    try:
-        with open(image_path, 'rb') as f:
-            img_data = f.read()
-        image = MIMEImage(img_data, name=os.path.basename(image_path)) # Include filename
-        msg.attach(image)
+        body = "A person has been detected. See attached image."
+        msg.attach(MIMEText(body, 'plain'))
 
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server: # Use SMTP_SSL for Gmail
-            server.login(SENDER_EMAIL, EMAIL_PASSWORD)
-            server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
-        print("Email sent successfully!")
-        return True  # Indicate successful email send
-    except Exception as e:
-        print(f"Failed to send email: {e}")
-        return False # Indicate email send failure
+        try:
+            with open(image_path, 'rb') as f:
+                img_data = f.read()
+            image = MIMEImage(img_data, name=os.path.basename(image_path))
+            msg.attach(image)
 
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+                server.login(self.SENDER_EMAIL, self.EMAIL_PASSWORD)
+                server.sendmail(self.SENDER_EMAIL, self.RECEIVER_EMAIL, msg.as_string())
+            print("[ALERT] Email sent successfully!")
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to send email: {e}")
+            return False
 
-# Main loop for person detection
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
+    def run_detection(self):
+        while True:
+            ret, frame = self.cap.read()
+            if not ret:
+                continue
 
-    (h, w) = frame.shape[:2]
-    blob = cv2.dnn.blobFromImage(frame, 0.007843, (300, 300), 127.5)
-    net.setInput(blob)
-    detections = net.forward()
+            # Convert to grayscale for Haar Cascade
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
+            # Detect people
+            people = self.person_cascade.detectMultiScale(gray, 1.1, 3)
 
-    person_detected = False
+            if len(people) > 0:
+                current_time = time.time()
+                if current_time - self.last_alert_time > self.COOLDOWN or not self.ALERT_SENT:
+                    # Draw rectangles around detected people
+                    for (x,y,w,h) in people:
+                        cv2.rectangle(frame, (x,y), (x+w,y+h), (0,255,0), 2)
+                    
+                    # Save and send email
+                    timestamp = time.strftime("%Y%m%d-%H%M%S")
+                    image_filename = f"detected_person_{timestamp}.jpg"
+                    cv2.imwrite(image_filename, frame)
 
-    for i in range(detections.shape[2]):
-        confidence = detections[0, 0, i, 2]
-        if confidence > 0.2:
-            idx = int(detections[0, 0, i, 1])
-            if idx == 15:  # Class ID for "person" in MobileNet SSD
-                person_detected = True
-                box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-                (startX, startY, endX, endY) = box.astype("int")
-                cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 255, 0), 2)
+                    email_sent = self.send_email(image_filename)
+                    if email_sent:
+                        self.last_alert_time = current_time
+                        self.ALERT_SENT = True
+            else:
+                self.ALERT_SENT = False
 
+            # Optional: Uncomment for debugging
+            # cv2.imshow('People Detection', frame)
+            
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
-    if person_detected:
-        current_time = time.time()
+        self.cap.release()
+        cv2.destroyAllWindows()
 
-        if current_time - last_alert_time > COOLDOWN or not ALERT_SENT: # Check cooldown OR if no alert was sent yet
-            # Save the detected frame (use timestamp in filename to avoid overwriting)
-            timestamp = time.strftime("%Y%m%d-%H%M%S")
-            image_filename = f"detected_person_{timestamp}.jpg"
-            image_path = image_filename  # Save in the current directory
-            cv2.imwrite(image_path, frame)
-
-            # Send email alert
-            email_sent = send_email(image_path)
-
-            if email_sent:
-                last_alert_time = current_time
-                ALERT_SENT = True # Set the flag after sending an alert
-
-    else: # Reset the alert flag if no person is detected
-        ALERT_SENT = False
-
-    # Display the output
-    cv2.imshow('People Detection', frame)
-
-    # Exit on 'q' key press
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# Release the webcam and close windows
-cap.release()
-cv2.destroyAllWindows()
+def start_people_detection():
+    print("[INFO] Starting people detection")
+    detector = PeopleDetector()
+    
+    # Run detection in a separate thread
+    detection_thread = threading.Thread(target=detector.run_detection, daemon=True)
+    detection_thread.start()

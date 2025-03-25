@@ -7,6 +7,8 @@ from flask_socketio import SocketIO, emit
 import threading
 import time
 import re
+from people import PeopleDetector
+
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="http://127.0.0.1:5000")
@@ -33,7 +35,15 @@ common_mistakes = {
 }
 
 
-
+def start_people_detection():
+    print("[INFO] Starting people detection thread")
+    detector = PeopleDetector()
+    
+    # Create a thread that runs the detection method
+    def detection_thread():
+        detector.run_detection()
+    
+    threading.Thread(target=detection_thread, daemon=True).start()
 
 
 # ✅ Remove Extra Words (Common Commands in Speech)
@@ -201,6 +211,10 @@ def start_recording():
 
 # Start the application
 if __name__ == '__main__':
+
+    # Start the person detection in background
+    threading.Thread(target=start_people_detection, daemon=True).start()
+
     # Start ROS thread
     threading.Thread(target=ros_thread, daemon=True).start()
     
@@ -208,4 +222,4 @@ if __name__ == '__main__':
     threading.Thread(target=simulate_robot_updates, daemon=True).start()
     
     # Run Flask with WebSocket support
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, debug=False, allow_unsafe_werkzeug=True)
