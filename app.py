@@ -222,4 +222,4 @@ if __name__ == '__main__':
     threading.Thread(target=simulate_robot_updates, daemon=True).start()
     
     # Run Flask with WebSocket support
-    socketio.run(app, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, debug=False, allow_unsafe_werkzeug=True, host='0.0.0.0', port = 5000)

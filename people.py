@@ -1,45 +1,33 @@
 import cv2
-import os
 import numpy as np
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 import time
+import os
 import threading
+import uuid
 
 class PeopleDetector:
     def __init__(self):
         # Constants
-        self.COOLDOWN = 60  # seconds
+        self.COOLDOWN = 30  # 5 minutes between emails
         self.last_alert_time = 0
-        self.ALERT_SENT = False
 
         # Email config
         self.SENDER_EMAIL = "scoutsentry390@gmail.com"
         self.RECEIVER_EMAIL = "labosmits@gmail.com"
         self.EMAIL_PASSWORD = "msll hnbt byty odgg"
 
+        # Tracking unique people
+        self.detected_people = set()
+
         # Use absolute path to Haar Cascade classifier
         cascade_path = "/usr/local/share/opencv4/haarcascades/haarcascade_fullbody.xml"
         
-        # Alternative paths to try
-        alternative_paths = [
-            "/usr/share/opencv4/haarcascades/haarcascade_fullbody.xml",
-            "/usr/local/share/OpenCV/haarcascades/haarcascade_fullbody.xml",
-            os.path.join(os.path.dirname(cv2.__file__), "data", "haarcascades", "haarcascade_fullbody.xml")
-        ]
-
-        # Find the first existing path
-        for path in [cascade_path] + alternative_paths:
-            if os.path.exists(path):
-                self.cascade_path = path
-                break
-        else:
-            raise FileNotFoundError("Could not find Haar Cascade classifier file")
-
         # Load the classifier
-        self.person_cascade = cv2.CascadeClassifier(self.cascade_path)
+        self.person_cascade = cv2.CascadeClassifier(cascade_path)
 
         # Webcam init
         self.cap = cv2.VideoCapture(0)
@@ -47,13 +35,12 @@ class PeopleDetector:
             print("[ERROR] Could not open webcam")
 
     def send_email(self, image_path):
-        # [Your existing send_email method remains the same]
         msg = MIMEMultipart()
         msg['From'] = self.SENDER_EMAIL
         msg['To'] = self.RECEIVER_EMAIL
-        msg['Subject'] = "Person Detected!"
+        msg['Subject'] = "New Person Detected!"
 
-        body = "A person has been detected. See attached image."
+        body = "A new person has been detected in the area. See attached image."
         msg.attach(MIMEText(body, 'plain'))
 
         try:
@@ -83,24 +70,39 @@ class PeopleDetector:
             # Detect people
             people = self.person_cascade.detectMultiScale(gray, 1.1, 3)
 
+            # Track new unique people
+            new_people = set()
+
             if len(people) > 0:
                 current_time = time.time()
-                if current_time - self.last_alert_time > self.COOLDOWN or not self.ALERT_SENT:
-                    # Draw rectangles around detected people
-                    for (x,y,w,h) in people:
-                        cv2.rectangle(frame, (x,y), (x+w,y+h), (0,255,0), 2)
+                
+                # Identify and track new people
+                for (x,y,w,h) in people:
+                    # Create a unique identifier based on position and size
+                    person_id = (x, y, w, h)
                     
+                    if person_id not in self.detected_people:
+                        # New person detected
+                        new_people.add(person_id)
+                        self.detected_people.add(person_id)
+                        
+                        # Draw rectangle for new people
+                        cv2.rectangle(frame, (x,y), (x+w,y+h), (0,255,0), 2)
+
+                # Send email if new people detected and cooldown passed
+                if new_people and (current_time - self.last_alert_time > self.COOLDOWN):
                     # Save and send email
                     timestamp = time.strftime("%Y%m%d-%H%M%S")
-                    image_filename = f"detected_person_{timestamp}.jpg"
+                    image_filename = f"new_person_{timestamp}.jpg"
                     cv2.imwrite(image_filename, frame)
 
                     email_sent = self.send_email(image_filename)
                     if email_sent:
                         self.last_alert_time = current_time
-                        self.ALERT_SENT = True
-            else:
-                self.ALERT_SENT = False
+
+            # Optional: Periodically clear old detections to prevent memory growth
+            if len(self.detected_people) > 100:
+                self.detected_people.clear()
 
             # Optional: Uncomment for debugging
             # cv2.imshow('People Detection', frame)
