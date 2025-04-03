@@ -167,9 +167,7 @@ def simulate_robot_updates():
 def home():
     return render_template('index.html')
 
-@app.route('/map')
-def map_view():
-    return render_template('map.html')
+
 
 @app.route('/location')
 def get_location():
